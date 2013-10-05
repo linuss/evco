@@ -1,0 +1,205 @@
+import org.vu.contest.ContestSubmission;
+import org.vu.contest.ContestEvaluation;
+
+import java.util.Random;
+import java.util.Properties;
+
+import java.util.LinkedList;
+
+
+public class player13 implements ContestSubmission
+{
+
+  static final int POP_SIZE = 10000;
+  static final int INPUTS   = 10;
+  static final double RANGE_MAX = 5;
+  static final double RANGE_MIN = -5;
+  static final double PC = 0.7;
+  static final double PM = 1/POP_SIZE;
+	private Random rnd_;
+	private ContestEvaluation evaluation_;
+	private int evaluations_limit_;
+
+	public player13()
+	{
+		rnd_ = new Random();
+	}
+
+	public void setSeed(long seed)
+	{
+		// Set seed of algortihms random process
+		rnd_.setSeed(seed);
+	}
+
+	public void setEvaluation(ContestEvaluation evaluation)
+	{
+		// Set evaluation problem used in the run
+		evaluation_ = evaluation;
+
+		// Get evaluation properties
+		Properties props = evaluation.getProperties();
+		evaluations_limit_ = Integer.parseInt(props.getProperty("Evaluations"));
+		boolean isMultimodal = Boolean.parseBoolean(props.getProperty("Multimodal"));
+		boolean hasStructure = Boolean.parseBoolean(props.getProperty("GlobalStructure"));
+		boolean isSeparable = Boolean.parseBoolean(props.getProperty("Separable"));
+
+		// Change settings(?)
+		if(isMultimodal){
+			// Do sth
+		}else{
+			// Do sth else
+		}
+	}
+
+  private void initiate_parents(double[][] parents){
+    Random r = new Random();
+    for(int i=0;i<POP_SIZE;i++){
+      for(int j=0;j<INPUTS;j++){
+        parents[i][j] = RANGE_MIN + (RANGE_MAX - RANGE_MIN) * r.nextDouble();
+      }
+    }
+  }
+
+  private void evaluate(double[][] children){
+    for(int i=0;i<POP_SIZE;i++){
+      children[i][INPUTS] = (double)(evaluation_.evaluate(children[i]));
+    }
+  }
+
+  private void shuffle_array(double[][] array){
+    Random r = new Random();
+    for(int i=array.length -1;i>0;i--){
+      int index = r.nextInt(i+1);
+      double[] a = array[index];
+      array[index] = array[i];
+      array[i] = a;
+     }
+  }
+
+  private void swap_tails(double[] parent1, double[] parent2, double[] child1, double[] child2, int split){
+    for(int i=0;i<split;i++){
+      child1[i] = parent1[i];
+      child2[i] = parent2[i];
+    }
+    for(int i=split;i<INPUTS;i++){
+      child1[i] = parent2[i];
+      child2[i] = parent1[i];
+    }
+  }
+
+
+  private double[][] crossover(double[][] parents){
+    double[][] result = new double[POP_SIZE][INPUTS+1];
+    Random r = new Random(); 
+    for(int i=0;i<POP_SIZE;i+=2){
+      if(r.nextDouble() <= PC){
+        int split = r.nextInt(INPUTS);
+        swap_tails(parents[i],parents[i+1], result[i], result[i+1], split);
+      }else{
+        result[i] = parents[i];
+        result[i+1] = parents[i+1];
+      }
+    }
+    return result;
+  }
+
+  private void mutate(double[][] children){
+    Random r = new Random();
+    for(int i=0;i<POP_SIZE;i++){
+      for(int j=0;j<INPUTS;j++){
+        if(r.nextDouble() <= PM){
+          children[i][j] = RANGE_MIN + (RANGE_MAX - RANGE_MIN) * r.nextDouble();
+        }
+      }
+    }
+  }
+
+
+  private double[][] concatenate(double[][] first, double[][] second){
+    double[][] result = new double[first.length+second.length][INPUTS+1];
+    for(int i=0;i<first.length;i++){
+      result[i] = first[i];
+    }
+    for(int i=0;i<second.length;i++){
+      result[first.length+i] = second[i];
+    }
+    return result;
+  }
+
+
+
+
+  //Quicksort on fitness
+  private double[][] sort_by_fitness(double[][] children){
+    Random r = new Random();
+    if(children.length <= 1){
+      return children;
+    }
+    double[] pivot = children[r.nextInt(POP_SIZE)];
+    LinkedList <double[]>less = new LinkedList();
+    LinkedList <double[]>greater = new LinkedList();
+    for(int i=0;i<children.length;i++){
+      if(children[i][INPUTS] <= pivot[INPUTS]){
+        less.add(children[i]);
+      }else{
+        greater.add(children[i]);
+      }
+    }
+    return concatenate(sort_by_fitness(less.toArray(new double[0][0])), sort_by_fitness(greater.toArray(new double[0][0])));
+  }
+
+
+
+
+
+  private double[][] select_parents(double[][] parents,double[][] children){
+    Random r = new Random();
+    int pick;
+    double[][] result = new double[POP_SIZE][INPUTS+1];
+
+    double[][] population = concatenate(parents, children);
+    population = sort_by_fitness(population);
+    for(int i=0;i<POP_SIZE;i++){
+      double roulette_wheel = r.nextDouble();
+      if(roulette_wheel < 0.5){
+        pick = r.nextInt(POP_SIZE/10); 
+        result[i] = population[pick]; 
+      }else if(roulette_wheel < 0.8){
+        pick = r.nextInt(POP_SIZE/5) + POP_SIZE/10;
+        result[i] = population[pick];
+      }else if(roulette_wheel < 0.95){
+        pick = r.nextInt(POP_SIZE/4) + POP_SIZE/4;
+        result[i] = population[pick];
+      }else{
+        pick = r.nextInt(POP_SIZE/2) + POP_SIZE/2;
+        result[i] = population[pick];
+      }
+    }
+
+    return result;
+  }
+
+
+	public void run()
+	{
+    double[][] parents = new double[POP_SIZE][INPUTS + 1];
+    double[][] children = new double[POP_SIZE][INPUTS + 1];
+    //The extra field after the inputs will be used for storing the fitness
+    initiate_parents(parents);
+    children = crossover(parents);
+    mutate(children);
+    evaluate(parents);
+    evaluate(children); 
+
+		int evals = 0;
+		while(evals<evaluations_limit_){
+      parents = select_parents(parents,children);
+      shuffle_array(parents);
+      children = crossover(parents);
+      mutate(children);
+      evaluate(children);
+			evals++;
+		}
+	}
+}
+
